@@ -11,6 +11,14 @@ import re, sys, glob
 tables = {}
 max_len = 1
 
+# types
+k_text_type = 'varchar'
+k_int_type = 'int'
+k_dec_type = 'decimal'
+k_bool_type = 'boolean'
+k_date_type = 'datetime'
+k_time_type = 'timestamp'
+
 # default values for types
 k_int = "0"
 k_str = "''"
@@ -65,8 +73,8 @@ def on_file_read(file, text):
 				var_name, pic = m.groups()
 				var_name = var_name.replace('-', '_')
 				print("{0} -> {1} is {2}".format(level, var_name, pic))
-				if (var_name.__len__() > max_len):
-					max_len = var_name.__len__()
+				if (len(var_name) > max_len):
+					max_len = len(var_name)
 				typ = convert(var_name, pic)
 				add_field(tbl_name, var_name, typ)
 	printTables(tables)
@@ -74,16 +82,19 @@ def on_file_read(file, text):
 def printTables(tbls):
 	''' prettyprints tables '''
 	for t in tbls:
-		print(t)
+		print("create table " + t + "(")
 		for f in tbls[t]:
-			str = "{:<" + "{}".format(max_len) + "} {}"	# '{:<max_len} {}'
+			#print(f)
+			#str = "{:<" + "{}".format(max_len) + "} {}"	# '{:<max_len} {}'
+			str = "{0:<30} {1}"
 			print("    " + str.format(f[0], f[1]))
+		print(k_end_table)
 	
 def add_table(tbl):
 	''' makes a new table '''
 	global tables
 	tables[tbl] = []
-	add_field(tbl, 'id', 'bigint auto_increment not null', add_default=False)
+	add_field(tbl, 'id', 'bigint not null auto_increment', add_default=False)
 	add_field(tbl, 'created_by', 'varchar(3)')
 	add_field(tbl, 'created_on', 'datetime')
 	add_field(tbl, 'updated_by', 'varchar(3)')
@@ -100,24 +111,36 @@ def add_field(tbl, field, type, add_default=True):
 			type += " not null default current_timestamp on update current_timestamp"
 		elif type.startswith('varchar'):
 			type += " not null default ''"
+		elif type == 'boolean':
+			type += " not null default 0"
 		else:
 			type += " not null default 0"
 	tables[tbl].append((field, type))
 
 def convert(name, clause):
-	''' converts picture clause to type '''
-	type = 'varchar'
-	m = re.match(r'(.)\((\d+)\)', clause)
+	''' converts picture clause to sql type '''
+	type = 'varchar(255)'
+	m = re.search(r'(.)\((\d+)\)', clause)		# 9(3), x(3)
 	if m:
 		ch, count = m.groups()
 		count = int(count)
+		# call self replacing x(3) with xxx
+		return convert(name, clause[0:m.start()] + ch * count + clause[m.end():0])
+	if clause.count('x') == 1 and clause.count('9') == 0 and name.endswith('_flg'):
+		type = 'boolean'
+	if '9' in clause and not 'x' in clause:
+		if 'v' in clause:
+			type = 'decimal'
+		else
+			type = 'int'
 	return type
 
 def on_line_read(file, line):
 	''' Performed when one line of file is read. '''
-	#re.sub(r'\r', r'', line)		# nuke carriage returns
-	line.replace('\r', '')
-	if ((line.__len__() > 6) and (line[6] == '*')):	# skip comment lines
+	line.replace('\r', '')		# nuke carriage returns
+	if (len(line) < 7):			# too short, skip
+		return False
+	elif (line[6] == '*'):		# comment line, skip
 		return False
 	return True
 
