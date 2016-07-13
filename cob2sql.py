@@ -9,6 +9,7 @@
 import re, sys, glob
 
 tables = {}
+tbl_stack = []
 prefixes = {}
 prefixes['current'] = []
 max_len = 1
@@ -69,23 +70,23 @@ def on_file_read(file, text):
 		
 		m = re.match(r'^\d\d ', f)		# if first 3 characters are digit digit space
 		if m:
-			level, field_string = (f[:2], f[3:])
-			if level == '01':
-				tbl_name = field_string.replace('-', '_')
-				tbl_name = re.sub(r'_rec$', r'', tbl_name)		# remove _rec suffix
-				prefixes[tbl_name] = prefixes['current']
-				prefixes['current'] = []
-				add_table(tbl_name)
-			m = re.match(r'([a-z0-9-]+) +pic[ture]{0,4} +(.*)', field_string)
-			if m:
-				var_name, pic = m.groups()
-				var_name = var_name.replace('-', '_')
-				               # remove prefix
-				print("{0} -> {1} is {2}".format(level, var_name, pic))
-				if (len(var_name) > max_len):
-					max_len = len(var_name)
-				typ = convert(var_name, pic)
-				add_field(tbl_name, var_name, typ)
+			level, field_string = (int(f[:2]), f[3:])
+			if level == '01' or ' occurs ' in field_string:
+				tbl_name = handle_table_line(level, field_string)
+			else:
+				m = re.match(r'([a-z0-9-]+) +pic[ture]{0,4} +(.*)', field_string)
+				if m:
+					var_name, pic = m.groups()
+					names = [re.sub(r'^' + pre, '', var_name, count=1) for pre in prefixes['current']]
+					var_name = min(names, key=len)		# remove longest matching prefix
+					var_name = var_name.replace('-', '_')
+					if not var_name.endswith(('_fill', 'filler')):	# ignore filler
+						#print("{0} -> {1} is {2}".format(level, var_name, pic))
+						if (len(var_name) > max_len):
+							max_len = len(var_name)
+						typ = convert(var_name, pic)
+						add_field(tbl_name, var_name, typ)
+	
 	printTables(tables)
 	
 def printTables(tbls):
@@ -93,37 +94,62 @@ def printTables(tbls):
 	for t in tbls:
 		print("create table " + t + "(")
 		for f in tbls[t]:
-			#print(f)
-			#str = "{:<" + "{}".format(max_len) + "} {}"	# '{:<max_len} {}'
-			str = "{0:<30} {1}"
-			print("    " + str.format(f[0], f[1]))
+			#str = "{0:<30} {1}"
+			str = "{0:<" + "{0}".format(max_len) + "} {1}"
+			print("    " + str.format(f[0], f[1]).rstrip() + ",")
 		print(k_end_table)
 	
+def handle_table_line(level, field_string):
+	''' Handles a line that should create a new table '''
+	global tbl_stack
+	
+	tbl_name = field_string.replace('-', '_')
+	tbl_name = re.sub(r'_rec$', r'', tbl_name, count=1)		# remove _rec suffix
+	if level == 1:		# level 01 is top level
+		tbl_stack = [(level, tbl_name)]
+		print('clear table stack')
+	elif level > tbl_stack[-1][0]:		# if field is part of current table
+		tbl_stack.append((level, tbl_name))
+		print('add {0} to stack'.format(level))
+	
+	add_table(tbl_name)
+	return tbl_name
+
 def add_table(tbl):
 	''' makes a new table '''
 	global tables
 	tables[tbl] = []
-	add_field(tbl, 'id', 'bigint not null auto_increment', add_default=False)
-	add_field(tbl, 'created_by', 'varchar(3)')
+	add_field(tbl, tbl+'_id', 'bigint', 'not null auto_increment primary key', as_is=True)
+	#add_field(tbl, 'primary key(id)', '', as_is=True)
+	add_field(tbl, 'created_by', 'varchar(255)')
 	add_field(tbl, 'created_on', 'datetime')
-	add_field(tbl, 'updated_by', 'varchar(3)')
+	add_field(tbl, 'updated_by', 'varchar(255)')
 	add_field(tbl, 'updated_on', 'datetime')
 	add_field(tbl, 'rowversion', 'timestamp')
 	
-def add_field(tbl, field, type, add_default=True):
+def add_field(tbl, field, type, options='', as_is=False, add_not_null=True, add_default=True):
 	''' adds field to table '''
 	global tables
-	if add_default:
-		if type == 'datetime':
-			type += " not null default '1990-01-01 00:00:00'"
-		elif type == 'timestamp':
-			type += " not null default current_timestamp on update current_timestamp"
-		elif type.startswith('varchar'):
-			type += " not null default ''"
-		elif type == 'boolean':
-			type += " not null default 0"
-		else:
-			type += " not null default 0"
+	if not as_is:
+		if add_not_null:
+			options += " not null"
+		if add_default:
+			if type.startswith('datetime'):
+				options += " default '1990-01-01 00:00:00'"
+			elif type.startswith('date'):
+				options += " default '1990-01-01'"
+			elif type.startswith('timestamp'):
+				options += " default current_timestamp on update current_timestamp"
+			elif type.startswith('time'):
+				options += " default '00:00:00'"
+			elif type.startswith('varchar'):
+				options += " default ''"
+			elif type.startswith('boolean'):
+				options += " default 0"
+			else:
+				options += " default 0"
+	if options:
+		type = "{0:<14} {1}".format(type, options.lstrip())
 	tables[tbl].append((field, type))
 
 def convert(name, clause):
@@ -135,11 +161,15 @@ def convert(name, clause):
 		count = int(count)
 		# call self replacing x(3) with xxx
 		return convert(name, clause[0:m.start()] + ch * count + clause[m.end():0])
+		
+	# ...-flg     pic x       is boolean
 	if clause.count('x') == 1 and clause.count('9') == 0 and name.endswith('_flg'):
 		type = 'boolean'
 	if '9' in clause and not 'x' in clause:
 		if 'v' in clause:
 			type = 'decimal'
+		elif clause.count('9') in range(6,8) and 'dat' in name:
+			type = 'date'
 		else:
 			type = 'int'
 	return type
@@ -153,7 +183,7 @@ def on_line_read(file, line):
 		return False
 	elif (line[6] == '*'):		# comment line, skip
 		if line.startswith('dict  * PRE'):	# but first save prefix for later
-			prefixes['current'].append(line.rsplit(maxsplit=1)[1])
+			prefixes['current'].append(line.rsplit(None, 1)[1].lower() + '-')
 		return False
 	return True
 
