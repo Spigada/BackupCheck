@@ -79,7 +79,7 @@ def on_file_read(file, text):
 		m = re.match(r'^\d\d ', f)		# if first 3 characters are digit digit space
 		if m:
 			level, field_string = (int(f[:2]), f[3:])
-			if level == '01' or ' occurs ' in field_string:
+			if level == 1: #or ' occurs ' in field_string:
 				tbl_name = handle_table_line(level, field_string)
 			else:
 				m = re.match(r'([a-z0-9-]+) +pic[ture]{0,4} +(.*)', field_string)
@@ -95,17 +95,7 @@ def on_file_read(file, text):
 						typ = convert(var_name, pic)
 						add_field(tbl_name, var_name, typ)
 	
-	printTables(tables)
 	
-def printTables(tbls):
-	''' prettyprints tables '''
-	for t in tbls:
-		print("create table " + t + "(")
-		for f in tbls[t]:
-			#str = "{0:<30} {1}"
-			str = "{0:<" + "{0}".format(max_len) + "} {1}"
-			print("    " + str.format(f[0], f[1]).rstrip() + ",")
-		print(k_end_table)
 	
 def handle_table_line(level, field_string):
 	''' Handles a line that should create a new table '''
@@ -113,12 +103,13 @@ def handle_table_line(level, field_string):
 	
 	tbl_name = field_string.replace('-', '_')
 	tbl_name = re.sub(r'_rec$', r'', tbl_name, count=1)		# remove _rec suffix
-	if level == 1:		# level 01 is top level
-		tbl_stack = [(level, tbl_name)]
-		print('clear table stack')
-	elif level > tbl_stack[-1][0]:		# if field is part of current table
-		tbl_stack.append((level, tbl_name))
-		print('add {0} to stack'.format(level))
+	# started on using a table stack for occurs... not sure if it's worth it.
+	#if level == 1:		# level 01 is top level
+	#	tbl_stack = [(level, tbl_name)]
+		#print('clear table stack')
+	#elif level > tbl_stack[-1][0]:		# if field is part of current table
+	#	tbl_stack.append((level, tbl_name))
+		#print('add {0} to stack'.format(level))
 	
 	add_table(tbl_name)
 	return tbl_name
@@ -176,7 +167,7 @@ def convert(name, clause):
 	if '9' in clause and not 'x' in clause:
 		if 'v' in clause:
 			type = 'decimal'
-		elif clause.count('9') in range(6,8) and 'dat' in name:
+		elif clause.count('9') in range(6,8+1) and 'dat' in name:
 			type = 'date'
 		else:
 			type = 'int'
@@ -204,6 +195,19 @@ def read_file(logFile):
 			f_contents += line
 	on_file_read(logFile.name, f_contents)
 
+def printTables(tbls):
+	''' prettyprints tables '''
+	for t in tbls:
+		tbl_fields = []
+		print("create table " + t + "(")
+		for f in tbls[t]:
+			#str = "{0:<30} {1}"
+			str = "{0:<" + "{0}".format(max_len) + "} {1}"
+			tbl_fields.append("    " + str.format(f[0], f[1]).rstrip() )
+		print(",\n".join(tbl_fields))
+		print(k_end_table)
+		print('')
+	
 
 # or possibly use sys.argv
 #with fileinput.input() as input:
@@ -214,5 +218,5 @@ for arg in sys.argv[1:]:
 		#for arg in input:
 			read_file(input)
 
-
+printTables(tables)
 print("")
