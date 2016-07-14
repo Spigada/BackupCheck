@@ -19,13 +19,21 @@ k_text_type = 'varchar'
 k_int_type = 'int'
 k_dec_type = 'decimal'
 k_bool_type = 'boolean'
-k_date_type = 'datetime'
-k_time_type = 'timestamp'
+k_datetime_type = 'datetime'
+k_date_type = 'date'
+k_timestamp_type = 'timestamp'
+k_time_type = 'time'
 
 # default values for types
-k_int = "0"
-k_str = "''"
-k_date = "'1901-01-01 00:00:00'"
+defaults = {}
+defaults[k_text_type] = "''"
+defaults[k_int_type]  = "0"
+defaults[k_dec_type]  = "0"
+defaults[k_bool_type] = "0"
+defaults[k_datetime_type] = "'1901-01-01 00:00:00'"
+defaults[k_date_type]     = "'1901-01-01'"
+defaults[k_time_type]     =            "'00:00:00'"
+defaults[k_datetime_type] = "current_timestamp on update current_timestamp"
 
 k_create_table = "\ncreate table "
 k_table_common = """(
@@ -207,17 +215,4 @@ for arg in sys.argv[1:]:
 			read_file(input)
 
 
-'''
-for key in sorted(file_result, key=time.mktime):
-	# extra line if starting a new day
-	#the_time = time.localtime(key)
-	
-	#key_day = key.tm_mday if key.tm_mday >= 1 else -1
-	key_day = key.split()[2]
-	if last_day != key_day:
-		print("")
-	last_day = key_day
-	
-	print("    {0}{1}".format(key, file_result[key]))
-'''
 print("")
