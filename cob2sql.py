@@ -120,11 +120,11 @@ def add_table(tbl):
 	tables[tbl] = []
 	add_field(tbl, tbl+'_id', 'bigint', 'not null auto_increment primary key', as_is=True)
 	#add_field(tbl, 'primary key(id)', '', as_is=True)
-	add_field(tbl, 'created_by', 'varchar(255)')
-	add_field(tbl, 'created_on', 'datetime')
-	add_field(tbl, 'updated_by', 'varchar(255)')
-	add_field(tbl, 'updated_on', 'datetime')
-	add_field(tbl, 'rowversion', 'timestamp')
+	add_field(tbl, 'created_by', k_text_type + '(255)')
+	add_field(tbl, 'created_on', k_datetime_type)
+	add_field(tbl, 'updated_by', k_text_type + '(255)')
+	add_field(tbl, 'updated_on', k_datetime_type)
+	add_field(tbl, 'rowversion', k_timestamp_type)
 	
 def add_field(tbl, field, type, options='', as_is=False, add_not_null=True, add_default=True):
 	''' adds field to table '''
@@ -133,18 +133,18 @@ def add_field(tbl, field, type, options='', as_is=False, add_not_null=True, add_
 		if add_not_null:
 			options += " not null"
 		if add_default:
-			if type.startswith('datetime'):
-				options += " default '1990-01-01 00:00:00'"
-			elif type.startswith('date'):
-				options += " default '1990-01-01'"
-			elif type.startswith('timestamp'):
-				options += " default current_timestamp on update current_timestamp"
-			elif type.startswith('time'):
-				options += " default '00:00:00'"
-			elif type.startswith('varchar'):
-				options += " default ''"
-			elif type.startswith('boolean'):
-				options += " default 0"
+			if type.startswith(k_datetime_type):
+				options += " default " + defaults[k_datetime_type]
+			elif type.startswith(k_date_type):
+				options += " default " + defaults[k_date_type]
+			elif type.startswith(k_timestamp_type):
+				options += " default " + defaults[k_timestamp_type]
+			elif type.startswith(k_time_type):
+				options += " default " + defaults[k_time_type]
+			elif type.startswith(k_text_type):
+				options += " default " + defaults[k_text_type]
+			elif type.startswith(k_boolean_type):
+				options += " default " + defaults[k_boolean_type]
 			else:
 				options += " default 0"
 	if options:
@@ -153,7 +153,7 @@ def add_field(tbl, field, type, options='', as_is=False, add_not_null=True, add_
 
 def convert(name, clause):
 	''' converts picture clause to sql type '''
-	type = 'varchar(255)'
+	type = k_text_type + '(255)'
 	m = re.search(r'(.)\((\d+)\)', clause)		# 9(3), x(3)
 	if m:
 		ch, count = m.groups()
@@ -163,14 +163,16 @@ def convert(name, clause):
 		
 	# ...-flg     pic x       is boolean
 	if clause.count('x') == 1 and clause.count('9') == 0 and name.endswith('_flg'):
-		type = 'boolean'
+		type = k_boolean_type
 	if '9' in clause and not 'x' in clause:
 		if 'v' in clause:
-			type = 'decimal'
+			type = k_decimal_type
 		elif clause.count('9') in range(6,8+1) and 'dat' in name:
-			type = 'date'
+			type = k_date_type
+		elif clause.count('9') == 4 and 'tim' in name:
+			tpye = k_time_type
 		else:
-			type = 'int'
+			type = k_int_type
 	return type
 
 def on_line_read(file, line):
