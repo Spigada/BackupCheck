@@ -33,7 +33,7 @@ defaults[k_bool_type] = "0"
 defaults[k_datetime_type] = "'1901-01-01 00:00:00'"
 defaults[k_date_type]     = "'1901-01-01'"
 defaults[k_time_type]     =            "'00:00:00'"
-defaults[k_datetime_type] = "current_timestamp on update current_timestamp"
+defaults[k_timestamp_type] = "current_timestamp on update current_timestamp"
 
 k_create_table = "\ncreate table "
 k_table_common = """(
@@ -82,7 +82,7 @@ def on_file_read(file, text):
 			if level == 1: #or ' occurs ' in field_string:
 				tbl_name = handle_table_line(level, field_string)
 			else:
-				m = re.match(r'([a-z0-9-]+) +pic[ture]{0,4} +(.*)', field_string)
+				m = re.match(r'([a-z0-9-]+) +pic[ture]{0,4} +(.*)$', field_string)
 				if m:
 					var_name, pic = m.groups()
 					names = [re.sub(r'^' + pre, '', var_name, count=1) for pre in prefixes['current']]
@@ -94,8 +94,6 @@ def on_file_read(file, text):
 							max_len = len(var_name)
 						typ = convert(var_name, pic)
 						add_field(tbl_name, var_name, typ)
-	
-	
 	
 def handle_table_line(level, field_string):
 	''' Handles a line that should create a new table '''
@@ -143,8 +141,8 @@ def add_field(tbl, field, type, options='', as_is=False, add_not_null=True, add_
 				options += " default " + defaults[k_time_type]
 			elif type.startswith(k_text_type):
 				options += " default " + defaults[k_text_type]
-			elif type.startswith(k_boolean_type):
-				options += " default " + defaults[k_boolean_type]
+			elif type.startswith(k_bool_type):
+				options += " default " + defaults[k_bool_type]
 			else:
 				options += " default 0"
 	if options:
@@ -155,18 +153,19 @@ def convert(name, clause):
 	''' converts picture clause to sql type '''
 	type = k_text_type + '(255)'
 	m = re.search(r'(.)\((\d+)\)', clause)		# 9(3), x(3)
+	print('converting {0} {1}'.format(name, clause))
 	if m:
 		ch, count = m.groups()
 		count = int(count)
 		# call self replacing x(3) with xxx
-		return convert(name, clause[0:m.start()] + ch * count + clause[m.end():0])
+		return convert(name, clause[0:m.start()] + ch * count + clause[m.end():])
 		
 	# ...-flg     pic x       is boolean
 	if clause.count('x') == 1 and clause.count('9') == 0 and name.endswith('_flg'):
-		type = k_boolean_type
+		type = k_bool_type
 	if '9' in clause and not 'x' in clause:
 		if 'v' in clause:
-			type = k_decimal_type
+			type = k_dec_type
 		elif clause.count('9') in range(6,8+1) and 'dat' in name:
 			type = k_date_type
 		elif clause.count('9') == 4 and 'tim' in name:
@@ -210,7 +209,6 @@ def printTables(tbls):
 		print(k_end_table)
 		print('')
 	
-
 # or possibly use sys.argv
 #with fileinput.input() as input:
 for arg in sys.argv[1:]:
@@ -219,6 +217,5 @@ for arg in sys.argv[1:]:
 		#with open(fil, mode='r', encoding='utf-8') as input:	# py3
 		#for arg in input:
 			read_file(input)
-
 printTables(tables)
 print("")
