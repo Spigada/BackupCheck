@@ -79,10 +79,10 @@ def on_file_read(file, text):
 		m = re.match(r'^\d\d ', f)		# if first 3 characters are digit digit space
 		if m:
 			level, field_string = (int(f[:2]), f[3:])
-			if level == 1: #or ' occurs ' in field_string:
+			if level == 1: #     or ' occurs ' in field_string:
 				tbl_name = handle_table_line(level, field_string)
 			else:
-				m = re.match(r'([a-z0-9-]+) +pic[ture]{0,4} +(.*)$', field_string)
+				m = re.match(r'([a-z_0-9-]+) +pic[ture]{0,4} +(.*)$', field_string)
 				if m:
 					var_name, pic = m.groups()
 					names = [re.sub(r'^' + pre, '', var_name, count=1) for pre in prefixes['current']]
@@ -94,6 +94,22 @@ def on_file_read(file, text):
 							max_len = len(var_name)
 						typ = convert(var_name, pic)
 						add_field(tbl_name, var_name, typ)
+				else:
+					m = re.match(r'([a-z_0-9-]+) +values? +(.*)$', field_string)
+					if m and level == 88:
+						var_name, val = m.groups()
+						names = [re.sub(r'^' + pre, '', var_name, count=1) for pre in prefixes['current']]
+						var_name = min(names, key=len)		# remove longest matching prefix
+						var_name = var_name.replace('-', '_')
+						if (len(var_name) > max_len):
+							max_len = len(var_name)
+						fld_tbl = tables[tbl_name][-1][0]	# name of the last field added
+						add_table(fld_tbl)
+						vals = val.split(',')
+						for v in vals:
+							typ = tables[tbl_name][-1][1].split(' ', 1)[0]	# 1st word of type of last f added
+							dflt = 'default {0}'.format(v)
+							add_field(tables[tbl_name][-1][0], var_name, typ, as_is=True, options=dflt)
 	
 def handle_table_line(level, field_string):
 	''' Handles a line that should create a new table '''
@@ -102,7 +118,7 @@ def handle_table_line(level, field_string):
 	tbl_name = field_string.replace('-', '_')
 	tbl_name = re.sub(r'_rec$', r'', tbl_name, count=1)		# remove _rec suffix
 	# started on using a table stack for occurs... not sure if it's worth it.
-	#if level == 1:		# level 01 is top level
+	#if level == 1:		# level 01 is top level, always a new table
 	#	tbl_stack = [(level, tbl_name)]
 		#print('clear table stack')
 	#elif level > tbl_stack[-1][0]:		# if field is part of current table
@@ -115,14 +131,15 @@ def handle_table_line(level, field_string):
 def add_table(tbl):
 	''' makes a new table '''
 	global tables
-	tables[tbl] = []
-	add_field(tbl, tbl+'_id', 'bigint', 'not null auto_increment primary key', as_is=True)
-	#add_field(tbl, 'primary key(id)', '', as_is=True)
-	add_field(tbl, 'created_by', k_text_type + '(255)')
-	add_field(tbl, 'created_on', k_datetime_type)
-	add_field(tbl, 'updated_by', k_text_type + '(255)')
-	add_field(tbl, 'updated_on', k_datetime_type)
-	add_field(tbl, 'rowversion', k_timestamp_type)
+	if not tbl in tables:
+		tables[tbl] = []
+		add_field(tbl, tbl+'_id', 'bigint', 'not null auto_increment primary key', as_is=True)
+		#add_field(tbl, 'primary key(id)', '', as_is=True)
+		add_field(tbl, 'created_by', k_text_type + '(100)')
+		add_field(tbl, 'created_on', k_datetime_type)
+		add_field(tbl, 'updated_by', k_text_type + '(100)')
+		add_field(tbl, 'updated_on', k_datetime_type)
+		add_field(tbl, 'rowversion', k_timestamp_type)
 	
 def add_field(tbl, field, type, options='', as_is=False, add_not_null=True, add_default=True):
 	''' adds field to table '''
@@ -151,7 +168,7 @@ def add_field(tbl, field, type, options='', as_is=False, add_not_null=True, add_
 
 def convert(name, clause):
 	''' converts picture clause to sql type '''
-	type = k_text_type + '(255)'
+	type = k_text_type + '(100)'
 	m = re.search(r'(.)\((\d+)\)', clause)		# 9(3), x(3)
 	print('converting {0} {1}'.format(name, clause))
 	if m:
@@ -169,7 +186,7 @@ def convert(name, clause):
 		elif clause.count('9') in range(6,8+1) and 'dat' in name:
 			type = k_date_type
 		elif clause.count('9') == 4 and 'tim' in name:
-			tpye = k_time_type
+			type = k_time_type
 		else:
 			type = k_int_type
 	return type
@@ -180,6 +197,8 @@ def on_line_read(file, line):
 	
 	line.replace('\r', '')		# nuke carriage returns
 	if (len(line) < 7):			# too short, skip
+		return False
+	elif (line[6] == '$'):		# xfd, skip
 		return False
 	elif (line[6] == '*'):		# comment line, skip
 		if line.startswith('dict  * PRE'):	# but first save prefix for later
