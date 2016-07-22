@@ -79,9 +79,10 @@ def on_file_read(file, text):
 		m = re.match(r'^\d\d ', f)		# if first 3 characters are digit digit space
 		if m:
 			level, field_string = (int(f[:2]), f[3:])
-			if level == 1: #     or ' occurs ' in field_string:
+			if level == 1 or (' occurs ' in field_string and not ' pic' in field_string):
 				tbl_name = handle_table_line(level, field_string)
 			else:
+				tbl_name = check_table_stack(level, field_string)
 				m = re.match(r'([a-z_0-9-]+) +pic[ture]{0,4} +(.*)$', field_string)
 				if m:
 					var_name, pic = m.groups()
@@ -118,15 +119,23 @@ def handle_table_line(level, field_string):
 	tbl_name = field_string.replace('-', '_')
 	tbl_name = re.sub(r'_rec$', r'', tbl_name, count=1)		# remove _rec suffix
 	# started on using a table stack for occurs... not sure if it's worth it.
-	#if level == 1:		# level 01 is top level, always a new table
-	#	tbl_stack = [(level, tbl_name)]
+	if level == 1:		# level 01 is top level, always a new table
+		tbl_stack = [(level, tbl_name)]
 		#print('clear table stack')
-	#elif level > tbl_stack[-1][0]:		# if field is part of current table
-	#	tbl_stack.append((level, tbl_name))
+	elif level > tbl_stack[-1][0]:
+		tbl_stack.append((level, tbl_name))
 		#print('add {0} to stack'.format(level))
 	
 	add_table(tbl_name)
-	return tbl_name
+	return tbl_name	
+
+def check_table_stack(level, field_string):
+	''' pop names off table stack until right level '''
+	global tbl_stack
+	
+	while level <= tbl_stack[-1][0]:
+		x, y = tbl_stack.pop()
+	return tbl_stack[-1][1]
 
 def add_table(tbl):
 	''' makes a new table '''
@@ -226,6 +235,7 @@ def printTables(tbls):
 			tbl_fields.append("    " + str.format(f[0], f[1]).rstrip() )
 		print(",\n".join(tbl_fields))
 		print(k_end_table)
+		print('-- end of table ' + t)
 		print('')
 	
 # or possibly use sys.argv
