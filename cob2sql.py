@@ -82,7 +82,7 @@ def on_file_read(file, text):
 			if level == 1 or (' occurs ' in field_string and not ' pic' in field_string):
 				tbl_name = handle_table_line(level, field_string)
 			else:
-				tbl_name = check_table_stack(level, field_string)
+				tbl_name = get_tbl_for_field(level, field_string)
 				m = re.match(r'([a-z_0-9-]+) +pic[ture]{0,4} +(.*)$', field_string)
 				if m:
 					var_name, pic = m.groups()
@@ -117,28 +117,29 @@ def handle_table_line(level, field_string):
 	global tbl_stack
 	
 	tbl_name = field_string.replace('-', '_')
+	tbl_name = tbl_name.split(' ', 1)[0]	# first word
 	tbl_name = re.sub(r'_rec$', r'', tbl_name, count=1)		# remove _rec suffix
-	# started on using a table stack for occurs... not sure if it's worth it.
-	if level == 1:		# level 01 is top level, always a new table
+	if level == 1:		# level 01 is top level, always a new table, clear the stack
 		tbl_stack = [(level, tbl_name)]
 		#print('clear table stack')
 	elif level > tbl_stack[-1][0]:
+		add_f_key(tbl_stack[-1][1], tbl_name+'_id', tbl_name, tbl_name+'_id')	# add foreign key reference to current table
 		tbl_stack.append((level, tbl_name))
 		#print('add {0} to stack'.format(level))
 	
 	add_table(tbl_name)
-	return tbl_name	
+	return tbl_name
 
-def check_table_stack(level, field_string):
-	''' pop names off table stack until right level '''
+def get_tbl_for_field(level, field_string):
+	''' gets correct table for given field '''
 	global tbl_stack
 	
 	while level <= tbl_stack[-1][0]:
 		x, y = tbl_stack.pop()
 	return tbl_stack[-1][1]
 
-def add_table(tbl):
-	''' makes a new table '''
+def add_table(tbl, child=None):
+	''' makes a new table, adding a foreign key reference to child '''
 	global tables
 	if not tbl in tables:
 		tables[tbl] = []
@@ -149,6 +150,10 @@ def add_table(tbl):
 		add_field(tbl, 'updated_by', k_text_type + '(100)')
 		add_field(tbl, 'updated_on', k_datetime_type)
 		add_field(tbl, 'rowversion', k_timestamp_type)
+
+def add_f_key(tbl, fld, f_tbl, f_fld):
+	add_field(tbl, fld+'_id', 'bigint', 'not null', as_is=True)
+	add_field(tbl, 'foreign key({0}) references {1}({2})'.format(fld, f_tbl, f_fld), as_is=True)
 	
 def add_field(tbl, field, type, options='', as_is=False, add_not_null=True, add_default=True):
 	''' adds field to table '''
